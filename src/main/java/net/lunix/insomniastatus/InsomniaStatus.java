@@ -1,104 +1,83 @@
 package net.lunix.insomniastatus;
 
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
-import net.minecraft.client.DeltaTracker;
+import net.lunix.insomniastatus.screen.InsomniaConfigScreen;
+import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.renderer.RenderPipelines;
-import net.minecraft.core.Holder;
-import net.minecraft.core.Registry;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.stats.Stats;
-import net.minecraft.world.effect.MobEffect;
-import net.minecraft.world.effect.MobEffectCategory;
-import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
+import org.lwjgl.glfw.GLFW;
 
 public class InsomniaStatus implements ClientModInitializer {
 
-    private static final int PHANTOM_THRESHOLD = 72000;
+    public static final int PHANTOM_THRESHOLD = 72000;
     private static final Identifier ID = Identifier.fromNamespaceAndPath("insomniastatus", "insomnia_hud");
-    private static final Identifier EFFECT_BG = Identifier.fromNamespaceAndPath("minecraft", "hud/effect_background");
 
-    private static Holder<MobEffect> RESTED_EFFECT;
+    private static int lastRemaining = PHANTOM_THRESHOLD;
+    private static KeyMapping openConfigKey;
+
+    public static int getLastRemaining() {
+        return lastRemaining;
+    }
 
     @Override
     public void onInitializeClient() {
-        // Register a real MobEffect so other mods can detect insomnia state
-        MobEffect restedEffect = Registry.register(
-            BuiltInRegistries.MOB_EFFECT,
-            Identifier.fromNamespaceAndPath("insomniastatus", "rested"),
-            new MobEffect(MobEffectCategory.BENEFICIAL, 0xF5A623) {}
-        );
-        RESTED_EFFECT = BuiltInRegistries.MOB_EFFECT.wrapAsHolder(restedEffect);
+        InsomniaConfig.load();
 
-        // Keep client-side effect in sync with insomnia timer each tick
+        // Keybind — unbound by default, configurable in Controls
+        KeyMapping.Category category = KeyMapping.Category.register(
+            Identifier.fromNamespaceAndPath("insomniastatus", "config")
+        );
+        openConfigKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+            "key.insomniastatus.config",
+            GLFW.GLFW_KEY_UNKNOWN,
+            category
+        ));
+
+        // Tick: update remaining ticks and keep the MobEffect in sync
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (client.player == null) return;
 
-            int ticksSinceRest = client.player.getStats().getValue(
-                Stats.CUSTOM.get(Stats.TIME_SINCE_REST)
-            );
-            int remaining = PHANTOM_THRESHOLD - ticksSinceRest;
-
-            if (remaining > 0) {
-                MobEffectInstance existing = client.player.getEffect(RESTED_EFFECT);
-                // Re-apply if missing or duration is off by more than 2 seconds
-                if (existing == null || Math.abs(existing.getDuration() - remaining) > 40) {
-                    client.player.addEffect(new MobEffectInstance(RESTED_EFFECT, remaining, 0, false, false, false));
-                }
+            // Client-side StatsCounter is only synced when the stats screen is opened.
+            // Read directly from the integrated server's player in singleplayer,
+            // fall back to client-side stats in multiplayer.
+            int ticksSinceRest;
+            MinecraftServer srv = client.getSingleplayerServer();
+            if (srv != null) {
+                ServerPlayer sp = srv.getPlayerList().getPlayer(client.player.getUUID());
+                ticksSinceRest = sp != null
+                    ? sp.getStats().getValue(Stats.CUSTOM.get(Stats.TIME_SINCE_REST))
+                    : client.player.getStats().getValue(Stats.CUSTOM.get(Stats.TIME_SINCE_REST));
             } else {
-                if (client.player.hasEffect(RESTED_EFFECT)) {
-                    client.player.removeEffect(RESTED_EFFECT);
-                }
+                ticksSinceRest = client.player.getStats().getValue(Stats.CUSTOM.get(Stats.TIME_SINCE_REST));
+            }
+            lastRemaining = Math.max(0, PHANTOM_THRESHOLD - ticksSinceRest);
+
+            if (openConfigKey.consumeClick()) {
+                client.execute(() -> client.setScreen(new InsomniaConfigScreen(null)));
             }
         });
 
-        // HUD rendering: item icon + countdown timer
-        HudElementRegistry.addLast(ID, new HudElement() {
-            @Override
-            public void extractRenderState(GuiGraphicsExtractor extractor, DeltaTracker deltaTracker) {
-                Minecraft client = Minecraft.getInstance();
-                if (client.player == null || client.options.hideGui) return;
+        // Register HUD element
+        HudElementRegistry.addLast(ID, InsomniaHud.create());
 
-                int ticksSinceRest = client.player.getStats().getValue(
-                    Stats.CUSTOM.get(Stats.TIME_SINCE_REST)
-                );
-
-                int remaining = PHANTOM_THRESHOLD - ticksSinceRest;
-                ItemStack icon = remaining > 0
-                    ? new ItemStack(Items.CAMPFIRE)
-                    : new ItemStack(Items.PHANTOM_MEMBRANE);
-
-                int x = extractor.guiWidth() - 25;
-                int y = 1;
-
-                extractor.blitSprite(RenderPipelines.GUI_TEXTURED, EFFECT_BG, x, y, 24, 24);
-                extractor.item(icon, x + 4, y + 4);
-
-                if (remaining > 0) {
-                    String timeText = formatTicks(remaining);
-                    int textX = x + 12 - client.font.width(timeText) / 2;
-                    extractor.text(client.font, timeText, textX, y + 26, 0xFFFFFF);
-                }
-            }
-        });
-    }
-
-    private static String formatTicks(int ticks) {
-        int totalSeconds = ticks / 20;
-        int totalMinutes = totalSeconds / 60;
-        int totalHours = totalMinutes / 60;
-        int days = totalHours / 24;
-        int hours = totalHours % 24;
-        int minutes = totalMinutes % 60;
-        if (days > 0) return days + "d " + hours + "h";
-        if (hours > 0) return hours + "h " + minutes + "m";
-        return totalMinutes + "m";
+        // Register /insomnia config command
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) ->
+            dispatcher.register(ClientCommands.literal("insomnia")
+                .then(ClientCommands.literal("config")
+                    .executes(ctx -> {
+                        Minecraft.getInstance().execute(() ->
+                            Minecraft.getInstance().setScreen(new InsomniaConfigScreen(null))
+                        );
+                        return 1;
+                    })))
+        );
     }
 }
