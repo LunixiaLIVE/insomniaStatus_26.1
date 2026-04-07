@@ -1,8 +1,7 @@
-package net.lunix.insomniastatus.screen;
+package net.lunix.nixstats.screen;
 
-import net.lunix.insomniastatus.InsomniaConfig;
-import net.lunix.insomniastatus.InsomniaHud;
-import net.lunix.insomniastatus.InsomniaStatus;
+import net.lunix.nixstats.NixStatsConfig;
+import net.lunix.nixstats.StatSidebar;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
@@ -28,38 +27,39 @@ public class PositionScreen extends Screen {
 
     @Override
     protected void init() {
-        InsomniaConfig cfg = InsomniaConfig.get();
-        hudX = cfg.posX < 0 ? this.width  / 2 + 91 + 3 : cfg.posX;
-        hudY = cfg.posY < 0 ? this.height - 2 - Math.round(InsomniaHud.frameH(cfg.layout) * cfg.scale) : cfg.posY;
+        NixStatsConfig cfg = NixStatsConfig.get();
+        int sw = StatSidebar.computeFrameWPx(cfg, minecraft.font, minecraft, cfg.scale);
+        int sh = Math.round(StatSidebar.frameH(cfg) * cfg.scale);
+        hudX = cfg.posX < 0 ? this.width  - sw - 4 : cfg.posX;
+        hudY = cfg.posY < 0 ? 4 : cfg.posY;
 
         addRenderableWidget(Button.builder(Component.literal("Reset Position"), btn -> {
-            InsomniaConfig cfg2 = InsomniaConfig.get();
-            hudX = this.width  / 2 + 91 + 3;
-            hudY = this.height - 2 - Math.round(InsomniaHud.frameH(cfg2.layout) * cfg2.scale);
-        }).bounds(this.width / 2 - 116, this.height - 26, 110, 20).build());
+            NixStatsConfig c = NixStatsConfig.get();
+            int w = StatSidebar.computeFrameWPx(c, minecraft.font, minecraft, c.scale);
+            hudX = this.width - w - 4;
+            hudY = 4;
+        }).bounds(this.width / 2 - 108, this.height - 26, 110, 20).build());
 
         addRenderableWidget(Button.builder(Component.literal("Done"), btn -> {
-            InsomniaConfig cfg2 = InsomniaConfig.get();
-            cfg2.posX = hudX;
-            cfg2.posY = hudY;
-            InsomniaConfig.save();
+            NixStatsConfig c = NixStatsConfig.get();
+            c.posX = hudX;
+            c.posY = hudY;
+            NixStatsConfig.save();
             minecraft.setScreen(parent);
-        }).bounds(this.width / 2 - 50, this.height - 26, 100, 20).build());
+        }).bounds(this.width / 2 + 8, this.height - 26, 100, 20).build());
     }
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
-        // Dark strip behind hint text for readability, no full-screen overlay
         g.fill(0, 0, this.width, 18, 0xA0000000);
         g.centeredText(font, Component.literal("Drag the frame to reposition  |  ESC to cancel"),
                 this.width / 2, 5, 0xFFFFFF);
 
-        InsomniaConfig cfg = InsomniaConfig.get();
-        InsomniaHud.render(g, hudX, hudY, cfg.scale, InsomniaStatus.getLastRemaining(), cfg);
+        NixStatsConfig cfg = NixStatsConfig.get();
+        StatSidebar.render(g, hudX, hudY, cfg.scale, cfg);
 
-        // Hover highlight
-        int fw = Math.round(InsomniaHud.frameW(cfg.layout) * cfg.scale);
-        int fh = Math.round(InsomniaHud.frameH(cfg.layout) * cfg.scale);
+        int fw = StatSidebar.computeFrameWPx(cfg, minecraft.font, minecraft, cfg.scale);
+        int fh = Math.round(StatSidebar.frameH(cfg) * cfg.scale);
         if (mouseX >= hudX && mouseX < hudX + fw && mouseY >= hudY && mouseY < hudY + fh) {
             g.fill(hudX, hudY, hudX + fw, hudY + fh, 0x30FFFFFF);
         }
@@ -70,9 +70,9 @@ public class PositionScreen extends Screen {
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean consumed) {
         if (!consumed && event.button() == 0) {
-            InsomniaConfig cfg = InsomniaConfig.get();
-            int fw = Math.round(InsomniaHud.frameW(cfg.layout) * cfg.scale);
-            int fh = Math.round(InsomniaHud.frameH(cfg.layout) * cfg.scale);
+            NixStatsConfig cfg = NixStatsConfig.get();
+            int fw = StatSidebar.computeFrameWPx(cfg, minecraft.font, minecraft, cfg.scale);
+            int fh = Math.round(StatSidebar.frameH(cfg) * cfg.scale);
             double mx = event.x(), my = event.y();
             if (mx >= hudX && mx < hudX + fw && my >= hudY && my < hudY + fh) {
                 dragging = true;
@@ -87,9 +87,9 @@ public class PositionScreen extends Screen {
     @Override
     public boolean mouseDragged(MouseButtonEvent event, double deltaX, double deltaY) {
         if (dragging && event.button() == 0) {
-            InsomniaConfig cfg = InsomniaConfig.get();
-            int fw = Math.round(InsomniaHud.frameW(cfg.layout) * cfg.scale);
-            int fh = Math.round(InsomniaHud.frameH(cfg.layout) * cfg.scale);
+            NixStatsConfig cfg = NixStatsConfig.get();
+            int fw = StatSidebar.computeFrameWPx(cfg, minecraft.font, minecraft, cfg.scale);
+            int fh = Math.round(StatSidebar.frameH(cfg) * cfg.scale);
             hudX = Math.max(0, Math.min(this.width  - fw, (int)(event.x() - dragOffX)));
             hudY = Math.max(0, Math.min(this.height - fh, (int)(event.y() - dragOffY)));
             return true;

@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
-  "id": "insomniastatus",
+  "id": "nixstats",
   "version": "${version}",
-  "name": "insomniaStatus",
-  "description": "Displays a HUD icon showing your insomnia status and time until phantoms can spawn.",
+  "name": "nixStats",
+  "description": "Configurable stat sidebar HUD. Track phantom timer, blocks mined, entities killed, and any other Minecraft statistic.",
   "authors": ["LunixiaLIVE"],
   "contact": {
-    "sources": "https://github.com/LunixiaLIVE/insomniaStatus_26.1"
+    "sources": "https://github.com/LunixiaLIVE/nixStats_26.1"
   },
   "license": "MIT",
   "environment": "client",
   "entrypoints": {
-    "client": ["net.lunix.insomniastatus.InsomniaStatus"]
+    "client": ["net.lunix.nixstats.NixStats"]
   },
   "depends": {
     "fabricloader": ">=${loader_version}",
